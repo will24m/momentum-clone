@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-top: 255 251 240;
+    --bg-bottom: 244 238 226;
+    --surface: 255 255 255;
+    --surface-muted: 248 245 238;
+    --border: 221 214 198;
+    --text: 30 28 25;
+    --muted: 111 104 93;
+    --accent: 195 110 61;
+    --accent-soft: 238 211 190;
+    --success: 84 128 108;
+    --danger: 164 79 66;
+  }
+
+  :root[data-theme="dark"] {
+    --bg-top: 16 20 25;
+    --bg-bottom: 9 12 16;
+    --surface: 21 27 34;
+    --surface-muted: 28 35 43;
+    --border: 54 64 76;
+    --text: 240 236 228;
+    --muted: 162 169 176;
+    --accent: 232 156 98;
+    --accent-soft: 88 62 43;
+    --success: 125 185 159;
+    --danger: 230 136 120;
+  }
+
+  :root[data-accent="paper"] {
+    --accent: 109 116 72;
+    --accent-soft: 208 217 181;
+  }
+
+  :root[data-theme="dark"][data-accent="paper"] {
+    --accent: 192 209 138;
+    --accent-soft: 58 67 34;
+  }
+
+  :root[data-accent="midnight"] {
+    --accent: 66 118 188;
+    --accent-soft: 190 212 242;
+  }
+
+  :root[data-theme="dark"][data-accent="midnight"] {
+    --accent: 119 172 238;
+    --accent-soft: 35 61 92;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(var(--accent), 0.16), transparent 40%),
+      linear-gradient(180deg, rgb(var(--bg-top)), rgb(var(--bg-bottom)));
+    color: rgb(var(--text));
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid rgba(var(--accent), 0.8);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .panel-surface {
+    @apply rounded-4xl border shadow-shell backdrop-blur-xl;
+    background: linear-gradient(180deg, rgba(var(--surface), 0.92), rgba(var(--surface), 0.82));
+    border-color: rgba(var(--border), 0.7);
+  }
+
+  .soft-surface {
+    @apply rounded-3xl border backdrop-blur-md;
+    background: rgba(var(--surface-muted), 0.88);
+    border-color: rgba(var(--border), 0.6);
+  }
+
+  .muted-copy {
+    color: rgba(var(--muted), 0.95);
+  }
+
+  .hairline {
+    border-color: rgba(var(--border), 0.6);
+  }
+
+  .accent-chip {
+    background: rgba(var(--accent-soft), 0.75);
+    color: rgb(var(--text));
+  }
+}
+
