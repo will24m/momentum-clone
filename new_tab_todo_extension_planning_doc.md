@@ -1223,3 +1223,105 @@ Those steps are documented and intentionally left as deployment work rather than
 - Google sign-in is not implemented yet
 
 These are acceptable for V1 and keep the product finishable.
+
+---
+
+## 30. Status Update and Natural Next Steps
+
+This section is intended to make the document useful after the initial implementation pass, not just before it.
+
+### 30.1 What has been completed in the repo
+
+- [x] Created a Manifest V3 Chrome extension structure
+- [x] Implemented a new tab override page
+- [x] Built the main todo experience in React + TypeScript + Tailwind
+- [x] Added local-first persistence using `chrome.storage.local`
+- [x] Implemented inline add, edit, complete, delete, and undo flows
+- [x] Implemented drag-and-drop reorder for active tasks
+- [x] Added completed-task grouping with collapse behavior
+- [x] Added sync state language and offline-friendly queued mutations
+- [x] Added local-only mode and account/sync mode switching
+- [x] Added email OTP auth flow for Supabase-backed sign-in
+- [x] Added Supabase-ready remote task/settings sync layer
+- [x] Added settings UI for theme, accent, mode, and completed-task behavior
+- [x] Added generated icon assets for the extension
+- [x] Added repo documentation:
+  - `README.md`
+  - architecture doc
+  - deployment doc
+  - privacy policy draft
+  - support doc
+  - release checklist
+- [x] Added Supabase SQL schema and RLS policies
+- [x] Built the extension successfully into `extension/dist`
+
+### 30.2 What is not yet completed
+
+These items are not blocked by missing code structure, but they are not fully finished until real infrastructure or release work is done.
+
+- [ ] Create the real Supabase project
+- [ ] Run the SQL migration against the real Supabase instance
+- [ ] Add real values to `extension/.env.local`
+- [ ] Load the built extension in Chrome and test it manually
+- [ ] Verify local-only mode end to end in the browser
+- [ ] Verify sign-in and sync end to end against the real Supabase project
+- [ ] Verify merge behavior when local tasks already exist before sign-in
+- [ ] Test on at least two browsers/profiles/devices for real sync validation
+- [ ] Publish privacy and support pages under `williamwu.ca`
+- [ ] Finalize DNS and hosting for brand-facing pages such as `todo.williamwu.ca`
+- [ ] Tighten host permissions before Chrome Web Store submission
+- [ ] Create Chrome Web Store listing copy and screenshots
+
+### 30.3 Natural next steps from here
+
+If continuing this project, this is the right order.
+
+1. Connect the real backend
+   - Create Supabase
+   - run the migration
+   - add the real environment variables
+
+2. Validate the shipped extension in Chrome
+   - Load `extension/dist`
+   - test add/edit/complete/delete/reorder
+   - confirm tasks survive browser restart
+
+3. Validate real auth and sync
+   - Sign in with email OTP
+   - confirm tasks sync across at least two environments
+   - test offline edits and later reconciliation
+
+4. Do release hardening
+   - tighten permissions
+   - perform accessibility pass
+   - test long-task and many-task scenarios
+   - verify import/merge and sign-out behavior carefully
+
+5. Finish public-facing release materials
+   - privacy page
+   - support page
+   - screenshots
+   - store listing copy
+
+### 30.4 Best higher-value improvements after the immediate next steps
+
+Once the real end-to-end sync path is confirmed, the most natural improvements are:
+
+- add a background service worker for more resilient sync retries
+- add Google sign-in via a hosted auth bridge on `todo.williamwu.ca`
+- narrow host permissions to exact production origins
+- add due dates only if they do not dilute the core todo UX
+- add automated tests once the manual flows are stable
+
+### 30.5 Recommended definition of “next milestone complete”
+
+The next milestone should be considered complete when all of the following are true:
+
+- the built extension is loaded in Chrome
+- local-only mode is verified manually
+- Supabase is connected with real credentials
+- sign-in works
+- tasks sync correctly across at least two environments
+- privacy/support pages exist under the branded domain
+
+That would move the project from “implemented in repo” to “real, usable product candidate.”

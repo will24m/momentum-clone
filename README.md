@@ -93,6 +93,7 @@ Important note:
 
 - Architecture: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 - Deployment: [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)
+- Supabase + Vercel deep dive: [`docs/SUPABASE_VERCEL_DEEP_DIVE.md`](./docs/SUPABASE_VERCEL_DEEP_DIVE.md)
 - Privacy policy draft: [`docs/PRIVACY_POLICY.md`](./docs/PRIVACY_POLICY.md)
 - Support page draft: [`docs/SUPPORT.md`](./docs/SUPPORT.md)
 - Release checklist: [`docs/RELEASE_CHECKLIST.md`](./docs/RELEASE_CHECKLIST.md)
@@ -103,4 +104,3 @@ Important note:
 - Consider moving sync flushing into a service worker if you want background retries without opening a new tab.
 - Tighten host permissions once the production domain story is fixed.
 - Add end-to-end tests after the Node toolchain is installed in the environment.
-
