@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { CloudOff, FolderSync, ListChecks, Settings2, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CloudOff, FolderSync, ListChecks, Settings2 } from "lucide-react";
 import { AuthDialog } from "@/components/AuthDialog";
 import { ImportDecisionDialog } from "@/components/ImportDecisionDialog";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -8,11 +8,33 @@ import { TaskList } from "@/components/TaskList";
 import { TaskRow } from "@/components/TaskRow";
 import { ToastViewport } from "@/components/ToastViewport";
 import { WelcomeOverlay } from "@/components/WelcomeOverlay";
-import { MOTIVATION_LINES, OFFLINE_COPY, SYNC_CONFIG_COPY } from "@/lib/constants";
+import { OFFLINE_COPY, SYNC_CONFIG_COPY } from "@/lib/constants";
 import { formatHeaderDate, formatSyncTime, getGreeting } from "@/lib/dates";
-import { partitionTasks, getTaskStats } from "@/lib/utils";
+import {
+  cn,
+  getCategoryAppearance,
+  getCategoryOptions,
+  getTaskStats,
+  normalizeCategoryKey,
+  partitionTasks,
+} from "@/lib/utils";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useAppStore } from "@/state/appStore";
+
+const backgroundModules = import.meta.glob("../images/*.{jpg,jpeg,png,webp,avif,svg}", {
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+const BACKGROUND_IMAGES = Object.values(backgroundModules).sort();
+
+function pickRandomBackground() {
+  if (!BACKGROUND_IMAGES.length) {
+    return null;
+  }
+
+  return BACKGROUND_IMAGES[Math.floor(Math.random() * BACKGROUND_IMAGES.length)];
+}
 
 function getSyncLabel() {
   const { mode, remoteConfigured, sync, online, auth } = useAppStore.getState();
@@ -48,7 +70,7 @@ function getSyncDetail() {
   const { mode, remoteConfigured, sync, online, auth } = useAppStore.getState();
 
   if (mode === "local") {
-    return "Private on this device";
+    return "Saved on this device.";
   }
 
   if (!remoteConfigured) {
@@ -60,29 +82,39 @@ function getSyncDetail() {
   }
 
   if (auth.status !== "signed-in") {
-    return "Connect an account when you want the same list everywhere.";
+    return "Sign in to sync.";
   }
 
   if (sync.health === "error") {
-    return sync.lastError ?? "We kept your latest changes locally and will retry.";
+    return sync.lastError ?? "Saved here. Retry later.";
   }
 
   return formatSyncTime(sync.lastSuccessfulSyncAt);
 }
 
+function Backdrop({ image }: { image: string | null }) {
+  return (
+    <div className="app-backdrop" aria-hidden="true">
+      {image ? <div className="app-backdrop-image" style={{ backgroundImage: `url("${image}")` }} /> : null}
+      <div className="app-backdrop-tint" />
+      <div className="app-backdrop-glow" />
+    </div>
+  );
+}
+
 function LoadingShell() {
   return (
-    <div className="min-h-screen px-6 py-8 md:px-10">
-      <div className="mx-auto max-w-7xl animate-fade-up">
-        <div className="panel-surface p-8">
-          <div className="h-8 w-48 animate-pulse rounded-full bg-[rgba(var(--surface-muted),0.95)]" />
-          <div className="mt-8 grid gap-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-20 animate-pulse rounded-3xl bg-[rgba(var(--surface-muted),0.95)]"
-              />
-            ))}
+    <div className="app-shell min-h-screen">
+      <Backdrop image={BACKGROUND_IMAGES[0] ?? null} />
+      <div className="relative min-h-screen px-5 py-6 md:px-8 md:py-10">
+        <div className="mx-auto max-w-5xl animate-fade-up">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+            <div className="space-y-4">
+              <div className="h-7 w-52 animate-pulse rounded-full bg-[rgba(var(--surface-muted),0.95)]" />
+              <div className="h-16 w-full animate-pulse rounded-[2rem] bg-[rgba(var(--surface),0.9)]" />
+              <div className="h-72 animate-pulse rounded-[2rem] bg-[rgba(var(--surface),0.86)]" />
+            </div>
+            <div className="hidden h-64 animate-pulse rounded-[2rem] bg-[rgba(var(--surface),0.82)] xl:block" />
           </div>
         </div>
       </div>
@@ -109,6 +141,9 @@ export default function App() {
   const showSettings = useAppStore((store) => store.showSettings);
   const showAuthDialog = useAppStore((store) => store.showAuthDialog);
   const importDecision = useAppStore((store) => store.importDecision);
+  const [backgroundImage] = useState<string | null>(() => pickRandomBackground());
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
+
   useOnlineStatus();
 
   useEffect(() => {
@@ -138,112 +173,210 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [focusComposer, openSettings]);
 
+  const categoryOptions = getCategoryOptions(tasks);
+
+  useEffect(() => {
+    if (selectedCategoryKey && !categoryOptions.some((option) => option.key === selectedCategoryKey)) {
+      setSelectedCategoryKey(null);
+    }
+  }, [categoryOptions, selectedCategoryKey]);
+
   if (!hydrated) {
     return <LoadingShell />;
   }
 
-  const { active, completed } = partitionTasks(tasks);
-  const stats = getTaskStats(tasks);
-  const motivation = MOTIVATION_LINES[new Date().getDate() % MOTIVATION_LINES.length];
+  const selectedCategory = categoryOptions.find((option) => option.key === selectedCategoryKey) ?? null;
+  const visibleTasks = selectedCategoryKey
+    ? tasks.filter((task) => normalizeCategoryKey(task.category) === selectedCategoryKey)
+    : tasks;
+  const { active, completed } = partitionTasks(visibleTasks);
+  const stats = getTaskStats(visibleTasks);
+  const overallStats = getTaskStats(tasks);
   const syncLabel = getSyncLabel();
   const syncDetail = getSyncDetail();
+  const showSyncCallout = mode === "local" || !remoteConfigured || auth.status !== "signed-in";
+  const showSyncAction = remoteConfigured && (mode === "local" || auth.status !== "signed-in");
+  const syncCalloutTitle = !remoteConfigured
+    ? "Sync setup"
+    : mode === "local"
+      ? "Saved here"
+      : "Sign in to sync";
+  const syncCalloutBody = !remoteConfigured
+    ? SYNC_CONFIG_COPY
+    : mode === "local"
+      ? "Turn on sync to use this list elsewhere."
+      : "Sign in to sync this list.";
+  const syncPanelCopy = showSyncCallout ? syncCalloutBody : syncDetail;
+  const syncDotClass = !remoteConfigured
+    ? "bg-[rgb(var(--muted))]"
+    : mode === "local" || auth.status !== "signed-in"
+      ? "bg-[rgb(var(--accent))] sync-pulse"
+      : sync.health === "error"
+        ? "bg-[rgb(var(--danger))] sync-pulse"
+        : sync.health === "syncing"
+          ? "bg-[rgb(var(--accent))] sync-pulse"
+          : "bg-[rgb(var(--success))]";
 
   return (
     <>
-      <div className="min-h-screen px-6 py-8 md:px-10">
-        <div className="mx-auto max-w-7xl animate-fade-up">
-          <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-3xl accent-chip">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div>
+      <div className="app-shell min-h-screen">
+        <Backdrop image={backgroundImage} />
+
+        <div className="relative min-h-screen px-5 py-6 md:px-8 md:py-10">
+          <div className="mx-auto max-w-5xl animate-fade-up">
+            <header className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div className="hero-surface max-w-2xl motion-rise px-4 py-4 md:px-5">
                 <p className="text-sm uppercase tracking-[0.24em] muted-copy">Momentum Todo</p>
-                <h1 className="text-xl font-semibold">
+                <h1 className="mt-4 text-3xl font-semibold md:text-[3.4rem] md:leading-[1.02]">
                   {getGreeting()} {auth.profile?.name ?? auth.profile?.email?.split("@")[0] ?? "there"}
                 </h1>
+                <p className="mt-3 text-base leading-7 muted-copy md:text-lg">
+                  One list. Next task.
+                </p>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="soft-surface px-4 py-3">
-                <p className="text-sm font-semibold">{syncLabel}</p>
-                <p className="mt-1 text-xs muted-copy">{syncDetail}</p>
-              </div>
-              {mode === "local" ? (
-                <button
-                  type="button"
-                  onClick={openAuthDialog}
-                  className="rounded-2xl px-4 py-3 text-sm font-semibold text-white"
-                  style={{ backgroundColor: "rgb(var(--accent))" }}
-                >
-                  Turn on sync
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={openSettings}
-                className="rounded-2xl border hairline bg-[rgba(var(--surface),0.74)] p-3 transition hover:bg-[rgba(var(--surface),0.96)]"
-                aria-label="Open settings"
-              >
-                <Settings2 className="h-5 w-5" />
-              </button>
-            </div>
-          </header>
-
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_22rem]">
-            <main className="panel-surface p-6 md:p-8">
-              <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="motion-rise-delayed flex items-center gap-3 self-start">
+                <div className="pill-surface flex items-center gap-3 rounded-full px-4 py-3">
+                  <span className={cn("h-2.5 w-2.5 rounded-full", syncDotClass)} />
                   <div>
-                    <p className="text-sm uppercase tracking-[0.22em] muted-copy">{formatHeaderDate()}</p>
-                    <h2 className="mt-3 text-3xl font-semibold md:text-4xl">One excellent list for the day.</h2>
-                  </div>
-                  <div className="soft-surface flex items-center gap-4 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold">{stats.activeCount} active</p>
-                      <p className="text-xs muted-copy">{stats.completedCount} completed</p>
-                    </div>
-                    <div className="h-10 w-px bg-[rgba(var(--border),0.6)]" />
-                    <div>
-                      <p className="text-sm font-semibold">{stats.completionRate}% done</p>
-                      <p className="text-xs muted-copy">today's visible list</p>
-                    </div>
+                    <p className="text-[11px] uppercase tracking-[0.22em] muted-copy">Sync</p>
+                    <p className="mt-0.5 text-sm font-semibold">{syncLabel}</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={openSettings}
+                  className="pill-surface rounded-2xl p-3 transition hover:-translate-y-0.5 hover:bg-[rgba(var(--surface),0.96)]"
+                  aria-label="Open settings"
+                >
+                  <Settings2 className="h-5 w-5" />
+                </button>
+              </div>
+            </header>
 
-                <TaskComposer focusNonce={composerFocusNonce} onSubmit={addTasksFromInput} />
-
-                {mode === "local" || !remoteConfigured ? (
-                  <div className="soft-surface flex items-start gap-3 px-4 py-4 text-sm">
-                    {sync.health === "offline" ? <CloudOff className="mt-0.5 h-4 w-4 shrink-0" /> : <FolderSync className="mt-0.5 h-4 w-4 shrink-0" />}
-                    <div>
-                      <p className="font-medium">
-                        {mode === "local" ? "Local-first mode is active." : "Cloud sync is not configured yet."}
-                      </p>
-                      <p className="mt-1 muted-copy">
-                        {mode === "local"
-                          ? "Your tasks are already persistent on this device. Turn on sync when you want them everywhere."
-                          : SYNC_CONFIG_COPY}
-                      </p>
+            <main className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
+              <div className="content-shell space-y-6 p-4 md:p-5">
+                <section className="motion-rise-delayed">
+                  <p className="text-sm uppercase tracking-[0.22em] muted-copy">{formatHeaderDate()}</p>
+                  <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div className="max-w-2xl">
+                      <h2 className="text-4xl font-semibold md:text-[4.1rem] md:leading-[0.98]">Today&apos;s list</h2>
+                      <p className="mt-3 text-base leading-7 muted-copy">Do the next task.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <span className="pill-surface rounded-full px-3 py-2 font-medium">
+                        {stats.activeCount} active
+                      </span>
+                      <span className="pill-surface rounded-full px-3 py-2 font-medium">
+                        {stats.completedCount} done
+                      </span>
+                      <span className="pill-surface rounded-full px-3 py-2 muted-copy">`/` to add</span>
                     </div>
                   </div>
-                ) : null}
-
-                <section>
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-lg font-semibold">Active tasks</p>
-                      <p className="text-sm muted-copy">Drag to reorder. Click text to edit inline.</p>
-                    </div>
-                    <div className="rounded-full bg-[rgba(var(--surface-muted),0.9)] px-3 py-2 text-sm">
-                      {active.length} ready
-                    </div>
-                  </div>
-                  <TaskList tasks={active} />
                 </section>
 
-                <section className="soft-surface p-4">
+                <div className="motion-rise-late">
+                  <TaskComposer focusNonce={composerFocusNonce} onSubmit={addTasksFromInput} />
+                </div>
+
+                {categoryOptions.length ? (
+                  <section className="motion-rise-later">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-semibold">Filter</p>
+                        <p className="text-sm muted-copy">
+                          {selectedCategory ? `Filter: ${selectedCategory.label}` : "Filter by category."}
+                        </p>
+                      </div>
+                      {selectedCategory ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCategoryKey(null)}
+                          className="pill-surface rounded-full px-3 py-2 text-sm font-medium transition hover:-translate-y-[1px]"
+                        >
+                          Clear filter
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategoryKey(null)}
+                        className="pill-surface inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition hover:-translate-y-[1px]"
+                        style={{
+                          boxShadow: selectedCategoryKey === null
+                            ? "0 0 0 2px rgba(var(--accent),0.22)"
+                            : undefined,
+                        }}
+                      >
+                        <span>All categories</span>
+                        <span className="rounded-full bg-[rgba(var(--surface-muted),0.88)] px-2 py-0.5 text-xs muted-copy">
+                          {overallStats.activeCount + overallStats.completedCount}
+                        </span>
+                      </button>
+
+                      {categoryOptions.map((option) => {
+                        const appearance = getCategoryAppearance(option.label);
+                        const isSelected = option.key === selectedCategoryKey;
+
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => setSelectedCategoryKey(option.key)}
+                            className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition hover:-translate-y-[1px]"
+                            style={{
+                              backgroundColor: appearance.background,
+                              borderColor: appearance.border,
+                              color: appearance.text,
+                              boxShadow: isSelected ? `0 0 0 2px ${appearance.border}` : "none",
+                              opacity: isSelected ? 1 : 0.9,
+                            }}
+                          >
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: appearance.accent }}
+                            />
+                            <span>{option.label}</span>
+                            <span className="rounded-full bg-[rgba(255,255,255,0.56)] px-2 py-0.5 text-xs text-[rgba(29,25,22,0.86)]">
+                              {option.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+
+                <section className="motion-rise-later">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-semibold">Active tasks</p>
+                      <p className="text-sm muted-copy">
+                        {selectedCategory
+                          ? `${selectedCategory.label} only. Drag to reorder. Click to edit.`
+                          : "Drag to reorder. Click to edit."}
+                      </p>
+                    </div>
+                    <span className="pill-surface rounded-full px-3 py-2 text-sm font-medium">
+                      {active.length} in view
+                    </span>
+                  </div>
+                  <TaskList
+                    tasks={active}
+                    emptyTitle={
+                      selectedCategory ? `No active tasks in ${selectedCategory.label}.` : undefined
+                    }
+                    emptyDescription={
+                      selectedCategory
+                        ? "Pick another category or clear the filter."
+                        : undefined
+                    }
+                  />
+                </section>
+
+                <section className="motion-rise-later border-t hairline pt-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <button
                       type="button"
@@ -252,55 +385,88 @@ export default function App() {
                     >
                       <ListChecks className="h-4 w-4" />
                       <span className="font-semibold">Completed</span>
-                      <span className="rounded-full bg-[rgba(var(--surface),0.9)] px-2 py-1 text-xs muted-copy">
+                      <span className="pill-surface rounded-full px-2 py-1 text-xs muted-copy">
                         {completed.length}
                       </span>
                     </button>
                     <p className="text-sm muted-copy">
-                      {settings.completedSectionCollapsed ? "Hidden for focus" : "Visible for review"}
+                      {settings.completedSectionCollapsed ? "Hidden" : `${stats.completionRate}% complete`}
                     </p>
                   </div>
 
                   {!settings.completedSectionCollapsed && completed.length ? (
-                    <div className="mt-4 space-y-3">
-                      {completed.map((task) => (
-                        <TaskRow key={task.id} task={task} />
-                      ))}
+                    <div className="soft-surface mt-4 p-3">
+                      <div className="space-y-2">
+                        {completed.map((task) => (
+                          <TaskRow key={task.id} task={task} />
+                        ))}
+                      </div>
                     </div>
                   ) : null}
 
                   {!settings.completedSectionCollapsed && !completed.length ? (
-                    <p className="mt-4 text-sm muted-copy">Nothing finished yet. There’s room for a win.</p>
+                    <div className="soft-surface mt-4 px-5 py-5 text-sm leading-6 muted-copy">
+                      {selectedCategory
+                        ? `Nothing finished in ${selectedCategory.label} yet.`
+                        : "No completed tasks yet."}
+                    </div>
                   ) : null}
                 </section>
               </div>
+
+              <aside className="motion-rise-delayed space-y-4 xl:sticky xl:top-8">
+                <section className="soft-surface p-5">
+                  <p className="text-[11px] uppercase tracking-[0.24em] muted-copy">Summary</p>
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <p className="text-sm muted-copy">Active</p>
+                      <p className="mt-1 text-2xl font-semibold">{stats.activeCount} active tasks</p>
+                    </div>
+                    <div className="border-t hairline pt-4">
+                      <p className="text-sm muted-copy">Completed</p>
+                      <p className="mt-1 text-2xl font-semibold">{stats.completedCount} done</p>
+                    </div>
+                    <div className="border-t hairline pt-4">
+                      <p className="text-sm muted-copy">Progress</p>
+                      <p className="mt-1 text-2xl font-semibold">{stats.completionRate}% complete</p>
+                      <p className="mt-1 text-sm muted-copy">`/` focuses the input.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="soft-surface p-5">
+                  <div className="flex items-start gap-3">
+                    {sync.health === "offline" ? (
+                      <CloudOff className="mt-1 h-4 w-4 shrink-0" />
+                    ) : (
+                      <FolderSync className="mt-1 h-4 w-4 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.24em] muted-copy">Sync</p>
+                      <p className="mt-2 text-xl font-semibold">{syncLabel}</p>
+                      <p className="mt-2 text-sm leading-6 muted-copy">{syncPanelCopy}</p>
+                    </div>
+                  </div>
+
+                  {showSyncCallout ? (
+                    <div className="soft-surface mt-4 px-4 py-3">
+                      <p className="text-sm font-medium">{syncCalloutTitle}</p>
+                    </div>
+                  ) : null}
+
+                  {showSyncAction ? (
+                    <button
+                      type="button"
+                      onClick={openAuthDialog}
+                      className="mt-4 w-full rounded-2xl px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+                      style={{ backgroundColor: "rgb(var(--accent))" }}
+                    >
+                      Turn on sync
+                    </button>
+                  ) : null}
+                </section>
+              </aside>
             </main>
-
-            <aside className="space-y-6">
-              <div className="panel-surface p-6">
-                <p className="text-sm uppercase tracking-[0.24em] muted-copy">Today</p>
-                <h3 className="mt-3 text-2xl font-semibold">{formatHeaderDate()}</h3>
-                <p className="mt-4 text-base leading-7 muted-copy">{motivation}</p>
-              </div>
-
-              <div className="panel-surface p-6">
-                <p className="text-sm uppercase tracking-[0.24em] muted-copy">Workspace health</p>
-                <div className="mt-4 grid gap-3">
-                  <div className="soft-surface p-4">
-                    <p className="text-sm muted-copy">Mode</p>
-                    <p className="mt-1 text-lg font-semibold">{mode === "cloud" ? "Synced workspace" : "Local workspace"}</p>
-                  </div>
-                  <div className="soft-surface p-4">
-                    <p className="text-sm muted-copy">Pending changes</p>
-                    <p className="mt-1 text-lg font-semibold">{sync.queue.length}</p>
-                  </div>
-                  <div className="soft-surface p-4">
-                    <p className="text-sm muted-copy">Shortcut</p>
-                    <p className="mt-1 text-lg font-semibold">Press `/` to focus the composer</p>
-                  </div>
-                </div>
-              </div>
-            </aside>
           </div>
         </div>
       </div>

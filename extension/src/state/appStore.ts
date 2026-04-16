@@ -24,6 +24,8 @@ import { hasRemoteConfig } from "@/lib/supabase";
 import { applyTheme } from "@/lib/theme";
 import {
   buildTask,
+  cleanTaskCategory,
+  cleanTaskNote,
   computeNextOrder,
   createId,
   markTaskStatus,
@@ -31,8 +33,15 @@ import {
   nowIso,
   partitionTasks,
   resequenceTasks,
+  splitTaskInput,
   tasksFingerprint,
 } from "@/lib/utils";
+
+type TaskDraftInput = {
+  text: string;
+  category?: string | null;
+  note?: string | null;
+};
 
 type ToastAction =
   | {
@@ -78,8 +87,9 @@ type AppStore = PersistedSnapshot & {
   verifyMagicCode: (email: string, token: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchMode: (mode: AppMode) => Promise<void>;
-  addTasksFromInput: (value: string) => Promise<void>;
+  addTasksFromInput: (input: TaskDraftInput) => Promise<void>;
   updateTaskText: (taskId: string, text: string) => Promise<void>;
+  updateTaskDetails: (taskId: string, input: TaskDraftInput) => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   restoreTasks: (tasks: TodoTask[]) => Promise<void>;
@@ -103,6 +113,35 @@ const initialSnapshot: PersistedSnapshot = {
   },
   welcomeDismissed: false,
 };
+
+function normalizeTaskRecord(task: TodoTask): TodoTask {
+  return {
+    ...task,
+    category: cleanTaskCategory(task.category),
+    note: cleanTaskNote(task.note),
+  };
+}
+
+function normalizeSnapshotRecord(snapshot: PersistedSnapshot): PersistedSnapshot {
+  return {
+    tasks: snapshot.tasks.map(normalizeTaskRecord),
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...snapshot.settings,
+    },
+    mode: snapshot.mode,
+    sync: {
+      ...DEFAULT_SYNC_STATE,
+      ...snapshot.sync,
+      queue: snapshot.sync.queue,
+    },
+    auth: {
+      ...DEFAULT_AUTH_STATE,
+      ...snapshot.auth,
+    },
+    welcomeDismissed: snapshot.welcomeDismissed,
+  };
+}
 
 function isCloudSyncActive(state: Pick<AppStore, "mode" | "remoteConfigured" | "online" | "auth">) {
   return (
@@ -295,7 +334,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       });
 
       const snapshot = await loadSnapshot();
-      const nextSnapshot = snapshot ?? initialSnapshot;
+      const nextSnapshot = normalizeSnapshotRecord(snapshot ?? initialSnapshot);
       applyTheme(nextSnapshot.settings);
 
       set({
@@ -540,11 +579,8 @@ export const useAppStore = create<AppStore>((set, get) => {
       await hydrateFromRemote("switch");
       await persistCurrentState();
     },
-    async addTasksFromInput(value) {
-      const entries = value
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
+    async addTasksFromInput(input) {
+      const entries = splitTaskInput(input.text);
 
       if (!entries.length) {
         return;
@@ -560,6 +596,8 @@ export const useAppStore = create<AppStore>((set, get) => {
           userId,
           status: shouldSync ? "pending" : "local-only",
           order: computeNextOrder(nextTasks, false) + index * 1000,
+          category: input.category,
+          note: input.note,
         }),
       );
 
@@ -577,7 +615,10 @@ export const useAppStore = create<AppStore>((set, get) => {
       }
     },
     async updateTaskText(taskId, text) {
-      const trimmed = text.trim();
+      await get().updateTaskDetails(taskId, { text });
+    },
+    async updateTaskDetails(taskId, input) {
+      const trimmed = input.text.trim();
       if (!trimmed) {
         await get().deleteTask(taskId);
         return;
@@ -586,11 +627,15 @@ export const useAppStore = create<AppStore>((set, get) => {
       const state = get();
       const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
       const updatedAt = nowIso();
+      const category = cleanTaskCategory(input.category);
+      const note = cleanTaskNote(input.note);
       const nextTasks = state.tasks.map((task) =>
         task.id === taskId
           ? {
               ...task,
               text: trimmed,
+              category,
+              note,
               updatedAt,
               syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const),
             }
@@ -607,6 +652,8 @@ export const useAppStore = create<AppStore>((set, get) => {
             taskId,
             updates: {
               text: trimmed,
+              category,
+              note,
               updatedAt,
             },
             createdAt: updatedAt,

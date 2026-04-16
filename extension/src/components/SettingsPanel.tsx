@@ -54,7 +54,7 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] muted-copy">Settings</p>
-            <h2 className="mt-2 text-2xl font-semibold">Shape the workspace</h2>
+            <h2 className="mt-2 text-2xl font-semibold">Settings</h2>
           </div>
           <button
             type="button"
@@ -76,7 +76,7 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
                 <p className="text-sm muted-copy">
                   {auth.status === "signed-in" && auth.profile
                     ? `Signed in as ${auth.profile.email}`
-                    : "Use local-only mode or connect sync when you're ready."}
+                    : "Use local mode or sign in to sync."}
                 </p>
               </div>
             </div>
@@ -124,7 +124,7 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
               </div>
               <div>
                 <p className="font-medium">Appearance</p>
-                <p className="text-sm muted-copy">Keep the page calm and easy to live in.</p>
+                <p className="text-sm muted-copy">Theme and accent.</p>
               </div>
             </div>
 
@@ -183,7 +183,7 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
             <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl border hairline px-4 py-3">
               <div>
                 <p className="text-sm font-medium">Collapse completed by default</p>
-                <p className="text-sm muted-copy">Keep finished work tucked away until you need it.</p>
+                <p className="text-sm muted-copy">Hide done tasks by default.</p>
               </div>
               <button
                 type="button"
@@ -220,4 +220,3 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
     </div>
   );
 }
-

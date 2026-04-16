@@ -7,6 +7,8 @@ export interface TodoTask {
   id: string;
   userId: string | null;
   text: string;
+  category: string | null;
+  note: string | null;
   completed: boolean;
   order: number;
   createdAt: string;
@@ -49,7 +51,7 @@ export type PendingMutation =
       id: string;
       type: "update";
       taskId: string;
-      updates: Partial<Pick<TodoTask, "text" | "completed" | "order" | "deletedAt" | "updatedAt">>;
+      updates: Partial<Pick<TodoTask, "text" | "category" | "note" | "completed" | "order" | "deletedAt" | "updatedAt">>;
       createdAt: string;
     }
   | {
@@ -134,4 +136,3 @@ export const DEFAULT_SYNC_STATE: SyncState = {
   health: "idle",
   lastError: null,
 };
-

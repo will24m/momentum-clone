@@ -1,15 +1,13 @@
 export const MOTIVATION_LINES = [
-  "Clear one small thing and the rest of the day gets lighter.",
-  "A calm tab is a good place to start again.",
-  "Momentum is usually one finished task away.",
-  "Keep the list honest. Make the next move easy.",
-  "Small progress feels better than perfect plans.",
+  "Do one task.",
+  "Keep the list honest.",
+  "Small progress counts.",
+  "Pick the next task.",
+  "Start simple.",
 ];
 
-export const EMPTY_STATE_COPY = "Nothing here yet. Add your first task and make this tab useful.";
+export const EMPTY_STATE_COPY = "Add a task to start.";
 
-export const OFFLINE_COPY = "Changes stay here safely and will sync when you reconnect.";
+export const OFFLINE_COPY = "Saved here. Sync resumes when you're back online.";
 
-export const SYNC_CONFIG_COPY =
-  "Add your Supabase project URL and anon key to enable account sync across devices.";
-
+export const SYNC_CONFIG_COPY = "Add your Supabase URL and anon key to turn on sync.";

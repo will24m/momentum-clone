@@ -5,6 +5,8 @@ type TaskRow = {
   id: string;
   user_id: string;
   text: string;
+  category: string | null;
+  note: string | null;
   completed: boolean;
   order_index: number;
   created_at: string;
@@ -49,6 +51,8 @@ function mapTaskRow(row: TaskRow): TodoTask {
     id: row.id,
     userId: row.user_id,
     text: row.text,
+    category: row.category,
+    note: row.note,
     completed: row.completed,
     order: row.order_index,
     createdAt: row.created_at,
@@ -73,6 +77,8 @@ function taskToRow(task: TodoTask) {
     id: task.id,
     user_id: task.userId,
     text: task.text,
+    category: task.category,
+    note: task.note,
     completed: task.completed,
     order_index: task.order,
     created_at: task.createdAt,
@@ -271,4 +277,3 @@ export async function saveRemoteSettings(settings: UserSettings) {
     throw error;
   }
 }
-

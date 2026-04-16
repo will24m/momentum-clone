@@ -60,9 +60,7 @@
   body {
     margin: 0;
     font-family: "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
-    background:
-      radial-gradient(circle at top left, rgba(var(--accent), 0.16), transparent 40%),
-      linear-gradient(180deg, rgb(var(--bg-top)), rgb(var(--bg-bottom)));
+    background: linear-gradient(180deg, rgb(var(--bg-top)), rgb(var(--bg-bottom)));
     color: rgb(var(--text));
   }
 
@@ -75,6 +73,13 @@
   textarea,
   select {
     font: inherit;
+    color: rgb(var(--text));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgba(var(--text), 0.48);
+    opacity: 1;
   }
 
   button:focus-visible,
@@ -88,19 +93,20 @@
 
 @layer components {
   .panel-surface {
-    @apply rounded-4xl border shadow-shell backdrop-blur-xl;
-    background: linear-gradient(180deg, rgba(var(--surface), 0.92), rgba(var(--surface), 0.82));
-    border-color: rgba(var(--border), 0.7);
+    @apply rounded-4xl border shadow-shell backdrop-blur-xl transition;
+    background: linear-gradient(180deg, rgba(var(--surface), 0.97), rgba(var(--surface), 0.91));
+    border-color: rgba(var(--border), 0.62);
   }
 
   .soft-surface {
-    @apply rounded-3xl border backdrop-blur-md;
-    background: rgba(var(--surface-muted), 0.88);
-    border-color: rgba(var(--border), 0.6);
+    @apply rounded-3xl border backdrop-blur-xl transition;
+    background: linear-gradient(180deg, rgba(var(--surface), 0.96), rgba(var(--surface-muted), 0.92));
+    border-color: rgba(var(--border), 0.64);
+    box-shadow: 0 16px 36px rgba(31, 28, 25, 0.1);
   }
 
   .muted-copy {
-    color: rgba(var(--muted), 0.95);
+    color: rgba(var(--text), 0.78);
   }
 
   .hairline {
@@ -111,5 +117,229 @@
     background: rgba(var(--accent-soft), 0.75);
     color: rgb(var(--text));
   }
+
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .content-shell {
+    border: 1px solid rgba(var(--border), 0.54);
+    border-radius: 2.2rem;
+    background: linear-gradient(180deg, rgba(var(--surface), 0.95), rgba(var(--surface), 0.91));
+    box-shadow: 0 24px 48px rgba(23, 18, 14, 0.14);
+    backdrop-filter: blur(30px) saturate(1.02);
+  }
+
+  .hero-surface {
+    border: 1px solid rgba(var(--border), 0.42);
+    border-radius: 2rem;
+    background: linear-gradient(180deg, rgba(var(--surface), 0.98), rgba(var(--surface), 0.94));
+    box-shadow: 0 18px 38px rgba(23, 18, 14, 0.12);
+    backdrop-filter: blur(28px);
+  }
+
+  .pill-surface {
+    border: 1px solid rgba(var(--border), 0.42);
+    background: rgba(var(--surface), 0.95);
+    box-shadow: 0 10px 24px rgba(31, 28, 25, 0.1);
+    backdrop-filter: blur(22px);
+  }
+
+  .app-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgb(var(--bg-top)), rgb(var(--bg-bottom)));
+  }
+
+  .app-backdrop-image {
+    position: absolute;
+    inset: -4%;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    filter: saturate(0.72) contrast(0.9) brightness(0.44);
+    opacity: 0.34;
+    transform: scale(1.08);
+    animation: backdrop-drift 38s ease-in-out infinite alternate;
+  }
+
+  .app-backdrop-tint {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(var(--bg-top), 0.96), rgba(var(--bg-bottom), 0.985)),
+      radial-gradient(circle at top left, rgba(var(--surface), 0.42), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(var(--surface), 0.32), transparent 26%),
+      linear-gradient(180deg, rgba(var(--surface), 0.16), rgba(var(--surface), 0.24));
+    backdrop-filter: blur(22px) saturate(0.9);
+  }
+
+  .app-backdrop-glow {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 20% 14%, rgba(255, 255, 255, 0.28), transparent 18%),
+      radial-gradient(circle at 80% 24%, rgba(255, 255, 255, 0.12), transparent 16%),
+      linear-gradient(180deg, rgba(var(--surface), 0.06), transparent 28%);
+    mix-blend-mode: screen;
+    opacity: 0.46;
+    animation: backdrop-pulse 12s ease-in-out infinite;
+  }
+
+  :root[data-theme="dark"] .content-shell {
+    background: linear-gradient(180deg, rgba(var(--surface), 0.94), rgba(var(--surface), 0.88));
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.34);
+  }
+
+  :root[data-theme="dark"] .hero-surface {
+    background: linear-gradient(180deg, rgba(var(--surface), 0.97), rgba(var(--surface), 0.9));
+  }
+
+  :root[data-theme="dark"] .pill-surface {
+    background: rgba(var(--surface), 0.96);
+  }
+
+  :root[data-theme="dark"] .app-backdrop-image {
+    filter: saturate(0.72) contrast(0.88) brightness(0.24);
+    opacity: 0.3;
+  }
+
+  :root[data-theme="dark"] .app-backdrop-tint {
+    background:
+      linear-gradient(180deg, rgba(var(--bg-top), 0.92), rgba(var(--bg-bottom), 0.97)),
+      radial-gradient(circle at top left, rgba(var(--accent), 0.08), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(var(--surface), 0.14), transparent 26%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.32));
+  }
+
+  .motion-rise {
+    animation: section-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .motion-rise-delayed {
+    animation: section-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+  }
+
+  .motion-rise-late {
+    animation: section-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) 180ms both;
+  }
+
+  .motion-rise-later {
+    animation: section-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) 260ms both;
+  }
+
+  .sync-pulse {
+    animation: sync-pulse 2.6s ease-in-out infinite;
+  }
+
+  .task-stack > * {
+    opacity: 0;
+    animation: task-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .task-stack > *:nth-child(1) {
+    animation-delay: 70ms;
+  }
+
+  .task-stack > *:nth-child(2) {
+    animation-delay: 120ms;
+  }
+
+  .task-stack > *:nth-child(3) {
+    animation-delay: 170ms;
+  }
+
+  .task-stack > *:nth-child(4) {
+    animation-delay: 220ms;
+  }
+
+  .task-stack > *:nth-child(5) {
+    animation-delay: 270ms;
+  }
+
+  .task-stack > *:nth-child(6) {
+    animation-delay: 320ms;
+  }
+
+  .task-stack > *:nth-child(7) {
+    animation-delay: 370ms;
+  }
+
+  .task-stack > *:nth-child(8) {
+    animation-delay: 420ms;
+  }
 }
 
+@keyframes backdrop-drift {
+  0% {
+    transform: scale(1.08) translate3d(0%, 0%, 0px);
+  }
+
+  100% {
+    transform: scale(1.12) translate3d(-1.5%, -1%, 0px);
+  }
+}
+
+@keyframes backdrop-pulse {
+  0%,
+  100% {
+    opacity: 0.58;
+  }
+
+  50% {
+    opacity: 0.82;
+  }
+}
+
+@keyframes section-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes task-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sync-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--accent), 0.18);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px rgba(var(--accent), 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-backdrop-image,
+  .app-backdrop-glow,
+  .motion-rise,
+  .motion-rise-delayed,
+  .motion-rise-late,
+  .motion-rise-later,
+  .sync-pulse,
+  .task-stack > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

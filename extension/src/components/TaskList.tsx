@@ -13,15 +13,17 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { CSS } from "@dnd-kit/utilities";
 import type { TodoTask } from "@shared/types";
-import { EMPTY_STATE_COPY } from "@/lib/constants";
 import { TaskRow } from "@/components/TaskRow";
+import { EMPTY_STATE_COPY } from "@/lib/constants";
 import { useAppStore } from "@/state/appStore";
 
 type TaskListProps = {
   tasks: TodoTask[];
+  emptyTitle?: string;
+  emptyDescription?: string;
 };
 
 function SortableTaskRow({ task }: { task: TodoTask }) {
@@ -43,7 +45,7 @@ function SortableTaskRow({ task }: { task: TodoTask }) {
   );
 }
 
-export function TaskList({ tasks }: TaskListProps) {
+export function TaskList({ tasks, emptyTitle, emptyDescription }: TaskListProps) {
   const reorderActiveTasks = useAppStore((store) => store.reorderActiveTasks);
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -77,9 +79,9 @@ export function TaskList({ tasks }: TaskListProps) {
 
   if (!tasks.length) {
     return (
-      <div className="soft-surface px-6 py-8 text-center">
-        <p className="text-lg font-medium">The board is clear.</p>
-        <p className="mt-2 text-sm muted-copy">{EMPTY_STATE_COPY}</p>
+      <div className="soft-surface px-6 py-10 text-center">
+        <p className="text-lg font-medium">{emptyTitle ?? "Nothing on the list yet."}</p>
+        <p className="mt-2 text-sm leading-6 muted-copy">{emptyDescription ?? EMPTY_STATE_COPY}</p>
       </div>
     );
   }
@@ -92,7 +94,7 @@ export function TaskList({ tasks }: TaskListProps) {
       modifiers={[restrictToVerticalAxis]}
     >
       <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-3">
+        <div className="task-stack space-y-3">
           {tasks.map((task) => (
             <SortableTaskRow key={task.id} task={task} />
           ))}
@@ -101,4 +103,3 @@ export function TaskList({ tasks }: TaskListProps) {
     </DndContext>
   );
 }
-

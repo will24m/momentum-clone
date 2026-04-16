@@ -19,12 +19,8 @@ export function WelcomeOverlay({ open }: WelcomeOverlayProps) {
           <Sparkles className="h-6 w-6" />
         </div>
         <p className="mt-6 text-sm uppercase tracking-[0.26em] muted-copy">New tab todo workspace</p>
-        <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight">
-          A calmer tab. One strong list. No friction.
-        </h1>
-        <p className="mt-4 max-w-2xl text-lg muted-copy">
-          Open a new tab and land in a polished todo workspace that feels instant, editable, and trustworthy.
-        </p>
+        <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight">One list. Next task.</h1>
+        <p className="mt-4 max-w-2xl text-lg muted-copy">Choose local or synced storage.</p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           <button
@@ -34,9 +30,7 @@ export function WelcomeOverlay({ open }: WelcomeOverlayProps) {
           >
             <LaptopMinimal className="h-5 w-5" />
             <p className="mt-4 text-lg font-semibold">Continue locally</p>
-            <p className="mt-2 text-sm muted-copy">
-              Start immediately with private on-device storage and no setup.
-            </p>
+            <p className="mt-2 text-sm muted-copy">Saved on this device.</p>
           </button>
           <button
             type="button"
@@ -45,13 +39,10 @@ export function WelcomeOverlay({ open }: WelcomeOverlayProps) {
           >
             <Cloud className="h-5 w-5" />
             <p className="mt-4 text-lg font-semibold">Sign in to sync</p>
-            <p className="mt-2 text-sm muted-copy">
-              Keep the same workspace across laptops and browsers using your account.
-            </p>
+            <p className="mt-2 text-sm muted-copy">Use the same list everywhere.</p>
           </button>
         </div>
       </div>
     </div>
   );
 }
-
