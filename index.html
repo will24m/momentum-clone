@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Momentum Todo</title>
+    <meta
+      name="description"
+      content="Download Momentum Todo, a Chrome new-tab extension for a cleaner task list."
+    />
+    <link rel="icon" href="/extension/public/icons/icon-32.png" />
+    <link rel="stylesheet" href="/landing.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="/">
+          <img src="/extension/public/icons/icon-128.png" alt="" width="44" height="44" />
+          <div>
+            <span class="eyebrow">Chrome Extension</span>
+            <strong>Momentum Todo</strong>
+          </div>
+        </a>
+        <a class="ghost-link" href="#install">Install steps</a>
+      </header>
+
+      <main class="hero-grid">
+        <section class="hero-copy">
+          <p class="eyebrow">New tab todo</p>
+          <h1>One list. Next task.</h1>
+          <p class="lead">
+            Momentum Todo replaces your Chrome new tab with a clean task list.
+          </p>
+
+          <div class="hero-actions">
+            <a class="button button-primary" href="/downloads/momentum-todo-extension.zip" download>
+              Download ZIP
+            </a>
+            <a class="button button-secondary" href="#install">How to install</a>
+          </div>
+
+          <ul class="pill-row" aria-label="Highlights">
+            <li>Chrome</li>
+            <li>Local-first</li>
+            <li>Optional sync</li>
+          </ul>
+        </section>
+
+        <aside class="download-card">
+          <p class="eyebrow">Download</p>
+          <h2>Manual install</h2>
+          <p class="card-copy">
+            This build is not in the Chrome Web Store yet. Download the ZIP, unzip it, then load the extracted folder in
+            Chrome.
+          </p>
+
+          <ol class="step-list">
+            <li>Download the ZIP.</li>
+            <li>Unzip it.</li>
+            <li>Open <code>chrome://extensions</code>.</li>
+            <li>Turn on Developer mode.</li>
+            <li>Click <strong>Load unpacked</strong>.</li>
+            <li>Select the extracted <code>dist</code> folder.</li>
+          </ol>
+
+          <a class="button button-primary button-block" href="/downloads/momentum-todo-extension.zip" download>
+            Download extension
+          </a>
+        </aside>
+      </main>
+
+      <section class="preview-panel" aria-label="Preview">
+        <div class="preview-window">
+          <div class="preview-header">
+            <span class="window-dot"></span>
+            <span class="window-dot"></span>
+            <span class="window-dot"></span>
+          </div>
+          <div class="preview-body">
+            <div class="preview-title">
+              <p class="eyebrow">Today</p>
+              <h3>Do the next task.</h3>
+            </div>
+            <div class="preview-input">Add task</div>
+            <ul class="preview-list">
+              <li>
+                <span class="preview-check"></span>
+                <div>
+                  <strong>Ship the landing page</strong>
+                  <span>work</span>
+                </div>
+              </li>
+              <li>
+                <span class="preview-check"></span>
+                <div>
+                  <strong>Plan tomorrow</strong>
+                  <span>personal</span>
+                </div>
+              </li>
+              <li>
+                <span class="preview-check"></span>
+                <div>
+                  <strong>Review notes</strong>
+                  <span>study</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-grid">
+        <article class="feature-card">
+          <p class="eyebrow">Focus</p>
+          <h2>Clean new tab</h2>
+          <p>Open Chrome and land on your tasks.</p>
+        </article>
+
+        <article class="feature-card">
+          <p class="eyebrow">Tasks</p>
+          <h2>Categories and subnotes</h2>
+          <p>Group work and keep context under each task.</p>
+        </article>
+
+        <article class="feature-card">
+          <p class="eyebrow">Sync</p>
+          <h2>Optional Supabase sync</h2>
+          <p>Keep using it locally or sign in to sync across devices.</p>
+        </article>
+      </section>
+
+      <section class="install-panel" id="install">
+        <div>
+          <p class="eyebrow">Install</p>
+          <h2>Chrome setup</h2>
+        </div>
+        <div class="install-columns">
+          <div class="install-card">
+            <h3>1. Download</h3>
+            <p>Save the extension ZIP to your computer.</p>
+          </div>
+          <div class="install-card">
+            <h3>2. Unzip</h3>
+            <p>Extract the ZIP so you can access the <code>dist</code> folder.</p>
+          </div>
+          <div class="install-card">
+            <h3>3. Open Chrome extensions</h3>
+            <p>Go to <code>chrome://extensions</code>.</p>
+          </div>
+          <div class="install-card">
+            <h3>4. Load it</h3>
+            <p>Turn on Developer mode, click <strong>Load unpacked</strong>, and choose the extracted <code>dist</code> folder.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
