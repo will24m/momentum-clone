@@ -102,7 +102,6 @@ code {
 
 .hero-copy,
 .download-card,
-.preview-panel,
 .feature-card,
 .install-panel {
   border: 1px solid var(--border);
@@ -213,96 +212,6 @@ code {
   line-height: 1.75;
 }
 
-.preview-panel {
-  margin-top: 28px;
-  padding: 18px;
-}
-
-.preview-window {
-  overflow: hidden;
-  border: 1px solid rgba(71, 55, 43, 0.1);
-  border-radius: 26px;
-  background: linear-gradient(180deg, #f8f2eb, #fefcf8);
-}
-
-.preview-header {
-  display: flex;
-  gap: 8px;
-  padding: 16px 18px 0;
-}
-
-.window-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(29, 23, 19, 0.18);
-}
-
-.preview-body {
-  display: grid;
-  gap: 18px;
-  padding: 18px;
-}
-
-.preview-title h3 {
-  margin: 10px 0 0;
-  font-size: clamp(2rem, 4vw, 3.6rem);
-  line-height: 0.96;
-  letter-spacing: -0.04em;
-}
-
-.preview-input {
-  padding: 18px 20px;
-  border: 1px solid rgba(71, 55, 43, 0.12);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.92);
-  color: rgba(29, 23, 19, 0.52);
-  font-weight: 600;
-}
-
-.preview-list {
-  display: grid;
-  gap: 12px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.preview-list li {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  padding: 18px;
-  border: 1px solid rgba(71, 55, 43, 0.12);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.preview-check {
-  width: 22px;
-  height: 22px;
-  margin-top: 1px;
-  border-radius: 50%;
-  border: 2px solid rgba(71, 55, 43, 0.26);
-}
-
-.preview-list strong {
-  display: block;
-  font-size: 1rem;
-}
-
-.preview-list span:last-child {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(162, 98, 56, 0.14);
-  color: rgba(91, 56, 35, 0.86);
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-transform: lowercase;
-}
-
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -374,7 +283,6 @@ code {
   }
 
   .download-card,
-  .preview-panel,
   .install-panel,
   .feature-card {
     padding-left: 22px;
