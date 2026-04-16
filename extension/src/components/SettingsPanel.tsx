@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { MoonStar, PaintBucket, RefreshCcw, SunMedium, UserRound, X } from "lucide-react";
 import type { AppMode, ThemePreference, UserSettings } from "@shared/types";
 import { SYNC_CONFIG_COPY } from "@/lib/constants";
@@ -31,10 +32,51 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
   const updateSettings = useAppStore((store) => store.updateSettings);
   const clearCompleted = useAppStore((store) => store.clearCompleted);
   const switchMode = useAppStore((store) => store.switchMode);
+  const updateProfileName = useAppStore((store) => store.updateProfileName);
   const signOut = useAppStore((store) => store.signOut);
   const auth = useAppStore((store) => store.auth);
   const remoteConfigured = useAppStore((store) => store.remoteConfigured);
   const mode = useAppStore((store) => store.mode);
+  const [displayName, setDisplayName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameFeedback, setNameFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayName(auth.profile?.name ?? "");
+    setNameFeedback(null);
+  }, [auth.profile?.name, auth.status, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = documentElement.style.overflow;
+
+    body.style.overflow = "hidden";
+    documentElement.style.overflow = "hidden";
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [open]);
+
+  async function handleNameSave() {
+    setIsSavingName(true);
+    setNameFeedback(null);
+
+    try {
+      await updateProfileName(displayName);
+      setNameFeedback("Name saved.");
+    } catch (error) {
+      setNameFeedback(error instanceof Error ? error.message : "Could not save name.");
+    } finally {
+      setIsSavingName(false);
+    }
+  }
 
   return (
     <div
@@ -50,7 +92,7 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
         onClick={closeSettings}
         aria-label="Close settings"
       />
-      <aside className="absolute right-0 top-0 h-full w-full max-w-md border-l bg-[rgba(var(--surface),0.97)] px-6 py-6 shadow-glass">
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col overflow-hidden border-l bg-[rgba(var(--surface),0.97)] px-6 py-6 shadow-glass">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] muted-copy">Settings</p>
@@ -65,7 +107,7 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
           </button>
         </div>
 
-        <div className="mt-8 space-y-6 overflow-y-auto pb-10">
+        <div className="mt-8 min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain pb-10 pr-1">
           <section className="soft-surface p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl accent-chip">
@@ -84,6 +126,33 @@ export function SettingsPanel({ open }: SettingsPanelProps) {
             {!remoteConfigured ? (
               <div className="mt-4 rounded-2xl border border-dashed hairline px-4 py-3 text-sm muted-copy">
                 {SYNC_CONFIG_COPY}
+              </div>
+            ) : null}
+
+            {auth.status === "signed-in" && auth.profile ? (
+              <div className="mt-4 rounded-2xl border hairline px-4 py-4">
+                <label className="block">
+                  <span className="text-sm font-medium">Display name</span>
+                  <input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    placeholder="Your name"
+                    className="mt-3 w-full rounded-2xl border border-[rgba(var(--border),0.5)] bg-[rgba(var(--surface),0.96)] px-4 py-3 text-sm focus:outline-none"
+                  />
+                </label>
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleNameSave()}
+                    disabled={isSavingName}
+                    className="rounded-2xl px-4 py-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ backgroundColor: "rgb(var(--accent))" }}
+                  >
+                    {isSavingName ? "Saving..." : "Save name"}
+                  </button>
+                  <p className="text-sm muted-copy">Shown in the greeting.</p>
+                </div>
+                {nameFeedback ? <p className="mt-3 text-sm muted-copy">{nameFeedback}</p> : null}
               </div>
             ) : null}
 

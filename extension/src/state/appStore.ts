@@ -18,6 +18,7 @@ import {
   softDeleteRemoteTask,
   upsertRemoteTask,
   upsertRemoteTasks,
+  updateRemoteProfileName,
   verifyMagicCode as verifyRemoteMagicCode,
 } from "@/lib/remote";
 import { hasRemoteConfig } from "@/lib/supabase";
@@ -85,6 +86,7 @@ type AppStore = PersistedSnapshot & {
   dismissWelcome: (mode: AppMode) => Promise<void>;
   sendMagicCode: (email: string) => Promise<void>;
   verifyMagicCode: (email: string, token: string) => Promise<void>;
+  updateProfileName: (name: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchMode: (mode: AppMode) => Promise<void>;
   addTasksFromInput: (input: TaskDraftInput) => Promise<void>;
@@ -517,6 +519,40 @@ export const useAppStore = create<AppStore>((set, get) => {
       } finally {
         await persistCurrentState();
       }
+    },
+    async updateProfileName(name) {
+      const state = get();
+      if (!state.remoteConfigured || state.auth.status !== "signed-in" || !state.auth.profile) {
+        throw new Error("Sign in before changing your name.");
+      }
+
+      try {
+        const profile = await updateRemoteProfileName(name);
+        set((snapshot) => ({
+          auth: {
+            ...snapshot.auth,
+            profile,
+            lastError: null,
+          },
+        }));
+        pushToast({
+          title: "Name updated",
+          description: "Your display name was saved.",
+          action: { kind: "none" },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "We could not update your name.";
+        set((snapshot) => ({
+          auth: {
+            ...snapshot.auth,
+            lastError: message,
+          },
+        }));
+        await persistCurrentState();
+        throw error instanceof Error ? error : new Error(message);
+      }
+
+      await persistCurrentState();
     },
     async signOut() {
       try {

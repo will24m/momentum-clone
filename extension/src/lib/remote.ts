@@ -22,20 +22,19 @@ type SettingsRow = {
   show_completed_by_default: boolean;
 };
 
+function normalizeMetadataString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function mapProfile(user: {
   id: string;
   email?: string;
   user_metadata?: Record<string, unknown>;
 }): AuthProfile {
   const metadata = user.user_metadata ?? {};
-  const name =
-    typeof metadata.full_name === "string"
-      ? metadata.full_name
-      : typeof metadata.name === "string"
-        ? metadata.name
-        : null;
-  const avatarUrl = typeof metadata.avatar_url === "string" ? metadata.avatar_url : null;
-  const provider = typeof metadata.provider === "string" ? metadata.provider : null;
+  const name = normalizeMetadataString(metadata.full_name) ?? normalizeMetadataString(metadata.name);
+  const avatarUrl = normalizeMetadataString(metadata.avatar_url);
+  const provider = normalizeMetadataString(metadata.provider);
 
   return {
     id: user.id,
@@ -166,6 +165,31 @@ export async function getRemoteProfile() {
   }
 
   return user ? mapProfile(user) : null;
+}
+
+export async function updateRemoteProfileName(name: string) {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error("Remote sync is not configured yet.");
+  }
+
+  const normalizedName = name.trim().slice(0, 60);
+  const { data, error } = await client.auth.updateUser({
+    data: {
+      name: normalizedName || null,
+      full_name: normalizedName || null,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data.user) {
+    throw new Error("The name was saved, but no user profile was returned.");
+  }
+
+  return mapProfile(data.user);
 }
 
 export async function fetchRemoteBootstrap(): Promise<RemoteBootstrapResult> {
