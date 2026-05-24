@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\user\\\\OneDrive\\\\Documents\\\\Personal Code\\\\momentum-clone-1\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(Get-ChildItem -File -Name *.config.*)",
+      "Bash(cat extension/package.json)",
+      "Bash(cat package.json)",
+      "Bash(npx tsc *)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm run *)",
+      "PowerShell(cd \"c:\\\\Users\\\\user\\\\OneDrive\\\\Documents\\\\Personal Code\\\\momentum-clone-1\\\\extension\"; $env:PATH = \".\\\\node_modules\\\\.bin;$env:PATH\"; npx --no-install vite build 2>&1 | Select-Object -Last 50)",
+      "PowerShell(cd \"c:\\\\Users\\\\user\\\\OneDrive\\\\Documents\\\\Personal Code\\\\momentum-clone-1\\\\extension\"; $env:PATH = \".\\\\node_modules\\\\.bin;$env:PATH\"; npx --no-install vite build 2>&1 | Select-Object -Last 20)",
+      "Bash(node node_modules/typescript/lib/tsc.js --noEmit)"
+    ]
+  }
+}

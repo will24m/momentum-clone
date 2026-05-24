@@ -12,19 +12,25 @@ import {
 import type { TodoTask } from "@shared/types";
 import { cn, getCategoryAppearance, getCategoryOptions, normalizeCategoryKey, splitTaskSubnotes } from "@/lib/utils";
 import { useAppStore } from "@/state/appStore";
+import { PriorityBadge } from "@/components/shared/PriorityBadge";
+import { DueDateBadge } from "@/components/shared/DueDateBadge";
+import { LabelPill } from "@/components/shared/LabelPill";
 
 type TaskRowProps = {
   task: TodoTask;
   style?: CSSProperties;
   dragHandleProps?: ButtonHTMLAttributes<HTMLButtonElement>;
   draggable?: boolean;
+  onOpenDetail?: (taskId: string) => void;
 };
 
-export function TaskRow({ task, style, dragHandleProps, draggable = false }: TaskRowProps) {
+export function TaskRow({ task, style, dragHandleProps, draggable = false, onOpenDetail }: TaskRowProps) {
   const tasks = useAppStore((store) => store.tasks);
+  const allLabels = useAppStore((store) => store.labels);
   const toggleTask = useAppStore((store) => store.toggleTask);
   const updateTaskDetails = useAppStore((store) => store.updateTaskDetails);
   const deleteTask = useAppStore((store) => store.deleteTask);
+  const taskLabels = allLabels.filter((l) => task.labelIds.includes(l.id));
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState(task.text);
   const [draftCategory, setDraftCategory] = useState(task.category ?? "");
@@ -71,9 +77,8 @@ export function TaskRow({ task, style, dragHandleProps, draggable = false }: Tas
     <div
       style={style}
       className={cn(
-        "group flex items-start gap-3 rounded-[1.6rem] border px-4 py-4 transition shadow-[0_12px_26px_rgba(31,28,25,0.04)] hover:-translate-y-0.5",
-        task.syncStatus === "error" ? "border-[rgba(var(--danger),0.45)]" : "border-[rgba(var(--border),0.38)]",
-        "bg-[rgba(var(--surface),0.96)] hover:border-[rgba(var(--accent),0.28)] hover:bg-[rgba(var(--surface),0.99)]",
+        "kanban-card group flex items-start gap-3 px-4 py-4",
+        task.syncStatus === "error" && "border-[rgba(var(--danger),0.45)]",
       )}
     >
       <button
@@ -96,7 +101,7 @@ export function TaskRow({ task, style, dragHandleProps, draggable = false }: Tas
           <p className="text-[11px] uppercase tracking-[0.18em] muted-copy">
             {task.completed ? "Done" : "Active"}
           </p>
-          {task.category ? (
+          {task.category && taskLabels.length === 0 ? (
             <span
               className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium"
               style={{
@@ -109,6 +114,11 @@ export function TaskRow({ task, style, dragHandleProps, draggable = false }: Tas
               {task.category}
             </span>
           ) : null}
+          {taskLabels.map((l) => (
+            <LabelPill key={l.id} name={l.name} color={l.color} />
+          ))}
+          {task.priority && <PriorityBadge priority={task.priority} compact />}
+          {task.dueDate && <DueDateBadge dueDate={task.dueDate} />}
         </div>
 
         {isEditing ? (
@@ -263,14 +273,29 @@ export function TaskRow({ task, style, dragHandleProps, draggable = false }: Tas
           </button>
         ) : null}
         {!isEditing ? (
-          <button
-            type="button"
-            aria-label="Edit task"
-            onClick={() => setIsEditing(true)}
-            className="rounded-2xl p-2 muted-copy transition hover:bg-[rgba(var(--surface-muted),0.9)] hover:text-[rgb(var(--text))]"
-          >
-            <PencilLine className="h-4 w-4" />
-          </button>
+          <>
+            {onOpenDetail && (
+              <button
+                type="button"
+                aria-label="Open task detail"
+                onClick={() => onOpenDetail(task.id)}
+                className="rounded-2xl p-2 muted-copy transition hover:bg-[rgba(var(--surface-muted),0.9)] hover:text-[rgb(var(--text))]"
+                title="Open detail"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+                  <path d="M3 8h10M3 4h10M3 12h6" />
+                </svg>
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Edit task"
+              onClick={() => setIsEditing(true)}
+              className="rounded-2xl p-2 muted-copy transition hover:bg-[rgba(var(--surface-muted),0.9)] hover:text-[rgb(var(--text))]"
+            >
+              <PencilLine className="h-4 w-4" />
+            </button>
+          </>
         ) : null}
         <button
           type="button"

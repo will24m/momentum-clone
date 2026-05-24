@@ -1,14 +1,22 @@
 import { create } from "zustand";
 import type {
+  ActiveView,
   AppMode,
+  Board,
+  Column,
   ImportDecisionState,
+  Label,
   PendingMutation,
   PersistedSnapshot,
+  SubtaskItem,
+  TaskPriority,
+  TaskSize,
   TodoTask,
   UserSettings,
 } from "@shared/types";
 import { DEFAULT_AUTH_STATE, DEFAULT_SETTINGS, DEFAULT_SYNC_STATE } from "@shared/types";
 import { loadSnapshot, saveSnapshot } from "@/lib/chromeStorage";
+import { needsMigration, migrateSnapshotToV2 } from "@/lib/migration";
 import {
   fetchRemoteBootstrap,
   getRemoteProfile,
@@ -20,6 +28,12 @@ import {
   upsertRemoteTasks,
   updateRemoteProfileName,
   verifyMagicCode as verifyRemoteMagicCode,
+  upsertRemoteBoard,
+  softDeleteRemoteBoard,
+  upsertRemoteColumn,
+  softDeleteRemoteColumn,
+  upsertRemoteLabel,
+  softDeleteRemoteLabel,
 } from "@/lib/remote";
 import { hasRemoteConfig } from "@/lib/supabase";
 import { applyTheme } from "@/lib/theme";
@@ -42,6 +56,13 @@ type TaskDraftInput = {
   text: string;
   category?: string | null;
   note?: string | null;
+  description?: string | null;
+  priority?: TaskPriority | null;
+  size?: TaskSize | null;
+  dueDate?: string | null;
+  startDate?: string | null;
+  labelIds?: string[];
+  subtasks?: SubtaskItem[];
 };
 
 type ToastAction =
@@ -70,9 +91,11 @@ type AppStore = PersistedSnapshot & {
   isFlushingQueue: boolean;
   showSettings: boolean;
   showAuthDialog: boolean;
+  showBoardSettings: boolean;
   importDecision: ImportDecisionState | null;
   toasts: ToastItem[];
   composerFocusNonce: number;
+  selectedTaskIds: string[];
   initialize: () => Promise<void>;
   setOnline: (online: boolean) => void;
   focusComposer: () => void;
@@ -82,6 +105,14 @@ type AppStore = PersistedSnapshot & {
   closeSettings: () => void;
   openAuthDialog: () => void;
   closeAuthDialog: () => void;
+  openBoardSettings: () => void;
+  closeBoardSettings: () => void;
+  toggleTaskSelection: (taskId: string) => void;
+  clearSelection: () => void;
+  selectAll: (taskIds: string[]) => void;
+  bulkMoveToColumn: (targetColumnId: string) => Promise<void>;
+  bulkDeleteTasks: () => Promise<void>;
+  bulkSetPriority: (priority: TaskPriority | null) => Promise<void>;
   resetAuthFlow: () => void;
   dismissWelcome: (mode: AppMode) => Promise<void>;
   sendMagicCode: (email: string) => Promise<void>;
@@ -89,6 +120,8 @@ type AppStore = PersistedSnapshot & {
   updateProfileName: (name: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchMode: (mode: AppMode) => Promise<void>;
+  setActiveBoard: (boardId: string) => void;
+  setActiveView: (view: ActiveView) => void;
   addTasksFromInput: (input: TaskDraftInput) => Promise<void>;
   updateTaskText: (taskId: string, text: string) => Promise<void>;
   updateTaskDetails: (taskId: string, input: TaskDraftInput) => Promise<void>;
@@ -96,9 +129,24 @@ type AppStore = PersistedSnapshot & {
   deleteTask: (taskId: string) => Promise<void>;
   restoreTasks: (tasks: TodoTask[]) => Promise<void>;
   reorderActiveTasks: (orderedTaskIds: string[]) => Promise<void>;
+  reorderTasksInColumn: (columnId: string, orderedTaskIds: string[]) => Promise<void>;
+  moveTaskToColumn: (taskId: string, targetColumnId: string, targetOrder: number) => Promise<void>;
   clearCompleted: () => Promise<void>;
   toggleCompletedSection: () => Promise<void>;
   updateSettings: (partial: Partial<UserSettings>) => Promise<void>;
+  // Board CRUD
+  createBoard: (name: string) => Promise<void>;
+  updateBoard: (boardId: string, updates: Partial<Pick<Board, "name" | "description">>) => Promise<void>;
+  deleteBoard: (boardId: string) => Promise<void>;
+  // Column CRUD
+  createColumn: (boardId: string, name: string, options?: { color?: string; wipLimit?: number }) => Promise<void>;
+  updateColumn: (columnId: string, updates: Partial<Pick<Column, "name" | "color" | "wipLimit" | "isTerminal" | "order">>) => Promise<void>;
+  deleteColumn: (columnId: string) => Promise<void>;
+  reorderColumns: (boardId: string, orderedColumnIds: string[]) => Promise<void>;
+  // Label CRUD
+  createLabel: (boardId: string, name: string, color: string) => Promise<void>;
+  updateLabel: (labelId: string, updates: Partial<Pick<Label, "name" | "color">>) => Promise<void>;
+  deleteLabel: (labelId: string) => Promise<void>;
   flushQueue: () => Promise<void>;
   refreshRemoteState: () => Promise<void>;
   resolveImportDecision: (strategy: "merge" | "cloud") => Promise<void>;
@@ -106,6 +154,9 @@ type AppStore = PersistedSnapshot & {
 
 const initialSnapshot: PersistedSnapshot = {
   tasks: [],
+  boards: [],
+  columns: [],
+  labels: [],
   settings: DEFAULT_SETTINGS,
   mode: "local",
   sync: DEFAULT_SYNC_STATE,
@@ -114,6 +165,9 @@ const initialSnapshot: PersistedSnapshot = {
     status: "unknown",
   },
   welcomeDismissed: false,
+  activeBoard: null,
+  activeView: "kanban",
+  schemaVersion: 1,
 };
 
 function normalizeTaskRecord(task: TodoTask): TodoTask {
@@ -121,12 +175,25 @@ function normalizeTaskRecord(task: TodoTask): TodoTask {
     ...task,
     category: cleanTaskCategory(task.category),
     note: cleanTaskNote(task.note),
+    labelIds: task.labelIds ?? [],
+    subtasks: task.subtasks ?? [],
+    boardId: task.boardId ?? null,
+    columnId: task.columnId ?? null,
+    description: task.description ?? null,
+    priority: task.priority ?? null,
+    size: task.size ?? null,
+    dueDate: task.dueDate ?? null,
+    startDate: task.startDate ?? null,
+    assigneeId: task.assigneeId ?? null,
   };
 }
 
 function normalizeSnapshotRecord(snapshot: PersistedSnapshot): PersistedSnapshot {
   return {
     tasks: snapshot.tasks.map(normalizeTaskRecord),
+    boards: snapshot.boards ?? [],
+    columns: snapshot.columns ?? [],
+    labels: snapshot.labels ?? [],
     settings: {
       ...DEFAULT_SETTINGS,
       ...snapshot.settings,
@@ -135,13 +202,16 @@ function normalizeSnapshotRecord(snapshot: PersistedSnapshot): PersistedSnapshot
     sync: {
       ...DEFAULT_SYNC_STATE,
       ...snapshot.sync,
-      queue: snapshot.sync.queue,
+      queue: snapshot.sync?.queue ?? [],
     },
     auth: {
       ...DEFAULT_AUTH_STATE,
       ...snapshot.auth,
     },
-    welcomeDismissed: snapshot.welcomeDismissed,
+    welcomeDismissed: snapshot.welcomeDismissed ?? false,
+    activeBoard: snapshot.activeBoard ?? null,
+    activeView: snapshot.activeView ?? "kanban",
+    schemaVersion: snapshot.schemaVersion ?? 1,
   };
 }
 
@@ -158,27 +228,28 @@ function isCloudSyncActive(state: Pick<AppStore, "mode" | "remoteConfigured" | "
 function buildPersistedSnapshot(state: AppStore): PersistedSnapshot {
   return {
     tasks: state.tasks,
+    boards: state.boards,
+    columns: state.columns,
+    labels: state.labels,
     settings: state.settings,
     mode: state.mode,
     sync: state.sync,
     auth: state.auth,
     welcomeDismissed: state.welcomeDismissed,
+    activeBoard: state.activeBoard,
+    activeView: state.activeView,
+    schemaVersion: state.schemaVersion,
   };
 }
 
 function compactQueue(queue: PendingMutation[]) {
   const latestSettings = [...queue].reverse().find((entry) => entry.type === "settings");
-  const latestReorder = [...queue].reverse().find((entry) => entry.type === "reorder");
 
   return queue.filter((entry) => {
     if (entry.type === "settings") {
       return latestSettings?.id === entry.id;
     }
-
-    if (entry.type === "reorder") {
-      return latestReorder?.id === entry.id;
-    }
-
+    // Keep all reorder mutations (now per-column, no compaction needed)
     return true;
   });
 }
@@ -251,6 +322,9 @@ export const useAppStore = create<AppStore>((set, get) => {
     if (reason === "startup") {
       set((current) => ({
         settings: mergedSettings,
+        boards: remote.boards.length > 0 ? remote.boards : current.boards,
+        columns: remote.columns.length > 0 ? remote.columns : current.columns,
+        labels: remote.labels.length > 0 ? remote.labels : current.labels,
         auth: {
           ...current.auth,
           profile: remote.profile,
@@ -291,6 +365,9 @@ export const useAppStore = create<AppStore>((set, get) => {
         mode: "cloud",
         settings: mergedSettings,
         tasks: ownedLocalTasks,
+        boards: remote.boards.length > 0 ? remote.boards : state.boards,
+        columns: remote.columns.length > 0 ? remote.columns : state.columns,
+        labels: remote.labels.length > 0 ? remote.labels : state.labels,
       });
       await queueTaskUpsert(ownedLocalTasks);
       await enqueueMutations([
@@ -307,6 +384,9 @@ export const useAppStore = create<AppStore>((set, get) => {
     set({
       mode: "cloud",
       settings: mergedSettings,
+      boards: remote.boards.length > 0 ? remote.boards : state.boards,
+      columns: remote.columns.length > 0 ? remote.columns : state.columns,
+      labels: remote.labels.length > 0 ? remote.labels : state.labels,
       tasks: remoteTasks.map((task) => ({ ...task, syncStatus: "synced" as const })),
       importDecision: null,
     });
@@ -322,9 +402,11 @@ export const useAppStore = create<AppStore>((set, get) => {
     isFlushingQueue: false,
     showSettings: false,
     showAuthDialog: false,
+    showBoardSettings: false,
     importDecision: null,
     toasts: [],
     composerFocusNonce: 0,
+    selectedTaskIds: [],
     async initialize() {
       if (get().initializing) {
         return;
@@ -335,12 +417,25 @@ export const useAppStore = create<AppStore>((set, get) => {
         remoteConfigured: hasRemoteConfig(),
       });
 
-      const snapshot = await loadSnapshot();
-      const nextSnapshot = normalizeSnapshotRecord(snapshot ?? initialSnapshot);
-      applyTheme(nextSnapshot.settings);
+      const rawSnapshot = await loadSnapshot();
+      let snapshot = normalizeSnapshotRecord(rawSnapshot ?? initialSnapshot);
+
+      // Run V1→V2 migration if needed
+      if (needsMigration(snapshot)) {
+        const userId = snapshot.auth?.profile?.id ?? null;
+        snapshot = migrateSnapshotToV2(snapshot, userId);
+        await saveSnapshot(snapshot);
+      }
+
+      applyTheme(snapshot.settings);
+
+      // Set activeBoard to first board if not already set
+      const activeBoardId =
+        snapshot.activeBoard ?? snapshot.boards[0]?.id ?? null;
 
       set({
-        ...nextSnapshot,
+        ...snapshot,
+        activeBoard: activeBoardId,
         hydrated: true,
         online: typeof navigator !== "undefined" ? navigator.onLine : true,
       });
@@ -442,6 +537,108 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
     closeAuthDialog() {
       set({ showAuthDialog: false });
+    },
+    openBoardSettings() {
+      set({ showBoardSettings: true });
+    },
+    closeBoardSettings() {
+      set({ showBoardSettings: false });
+    },
+    toggleTaskSelection(taskId) {
+      set((state) => ({
+        selectedTaskIds: state.selectedTaskIds.includes(taskId)
+          ? state.selectedTaskIds.filter((id) => id !== taskId)
+          : [...state.selectedTaskIds, taskId],
+      }));
+    },
+    clearSelection() {
+      set({ selectedTaskIds: [] });
+    },
+    selectAll(taskIds) {
+      set({ selectedTaskIds: taskIds });
+    },
+    async bulkMoveToColumn(targetColumnId) {
+      const state = get();
+      const selectedIds = new Set(state.selectedTaskIds);
+      if (!selectedIds.size) return;
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const targetColumn = state.columns.find((c) => c.id === targetColumnId);
+      const isTerminal = targetColumn?.isTerminal ?? false;
+      const now = nowIso();
+      const affected = state.tasks.filter((t) => selectedIds.has(t.id));
+      const nextTasks = state.tasks.map((task) =>
+        selectedIds.has(task.id)
+          ? { ...task, columnId: targetColumnId, completed: isTerminal, updatedAt: now, syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const) }
+          : task,
+      );
+      set({ tasks: nextTasks, selectedTaskIds: [] });
+      if (shouldSync) {
+        await enqueueMutations(
+          affected.map((t) => ({
+            id: createId("mutation_"),
+            type: "update" as const,
+            taskId: t.id,
+            updates: { columnId: targetColumnId, completed: isTerminal, updatedAt: now },
+            createdAt: now,
+          })),
+        );
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async bulkDeleteTasks() {
+      const state = get();
+      const selectedIds = new Set(state.selectedTaskIds);
+      if (!selectedIds.size) return;
+      const deletedAt = nowIso();
+      const deletedTasks = state.tasks.filter((t) => selectedIds.has(t.id));
+      set({ tasks: state.tasks.filter((t) => !selectedIds.has(t.id)), selectedTaskIds: [] });
+      pushToast({
+        title: `${deletedTasks.length} task${deletedTasks.length === 1 ? "" : "s"} deleted`,
+        description: "Undo is available for a moment.",
+        actionLabel: "Undo",
+        action: { kind: "restore-tasks", tasks: deletedTasks },
+      });
+      if (state.mode === "cloud" && state.auth.status === "signed-in") {
+        await enqueueMutations(
+          deletedTasks.map((t) => ({
+            id: createId("mutation_"),
+            type: "delete" as const,
+            taskId: t.id,
+            deletedAt,
+            createdAt: deletedAt,
+          })),
+        );
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async bulkSetPriority(priority) {
+      const state = get();
+      const selectedIds = new Set(state.selectedTaskIds);
+      if (!selectedIds.size) return;
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const now = nowIso();
+      const affected = state.tasks.filter((t) => selectedIds.has(t.id));
+      const nextTasks = state.tasks.map((task) =>
+        selectedIds.has(task.id)
+          ? { ...task, priority, updatedAt: now, syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const) }
+          : task,
+      );
+      set({ tasks: nextTasks, selectedTaskIds: [] });
+      if (shouldSync) {
+        await enqueueMutations(
+          affected.map((t) => ({
+            id: createId("mutation_"),
+            type: "update" as const,
+            taskId: t.id,
+            updates: { priority, updatedAt: now },
+            createdAt: now,
+          })),
+        );
+      } else {
+        await persistCurrentState();
+      }
     },
     resetAuthFlow() {
       set((state) => ({
@@ -581,6 +778,9 @@ export const useAppStore = create<AppStore>((set, get) => {
           userId: null,
           syncStatus: "local-only" as const,
         })),
+        boards: state.boards.map((b) => ({ ...b, userId: null, syncStatus: "local-only" as const })),
+        columns: state.columns.map((c) => ({ ...c, userId: null, syncStatus: "local-only" as const })),
+        labels: state.labels.map((l) => ({ ...l, userId: null, syncStatus: "local-only" as const })),
       }));
       await persistCurrentState();
     },
@@ -615,6 +815,14 @@ export const useAppStore = create<AppStore>((set, get) => {
       await hydrateFromRemote("switch");
       await persistCurrentState();
     },
+    setActiveBoard(boardId) {
+      set({ activeBoard: boardId });
+      void persistCurrentState();
+    },
+    setActiveView(view) {
+      set({ activeView: view });
+      void persistCurrentState();
+    },
     async addTasksFromInput(input) {
       const entries = splitTaskInput(input.text);
 
@@ -625,6 +833,14 @@ export const useAppStore = create<AppStore>((set, get) => {
       const state = get();
       const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
       const userId = shouldSync ? state.auth.profile?.id ?? null : null;
+
+      // Use the active board's first non-terminal column, or first column
+      const activeBoardId = state.activeBoard ?? state.boards[0]?.id ?? null;
+      const boardColumns = state.columns
+        .filter((c) => c.boardId === activeBoardId && !c.deletedAt)
+        .sort((a, b) => a.order - b.order);
+      const defaultColumn = boardColumns.find((c) => !c.isTerminal) ?? boardColumns[0] ?? null;
+
       let nextTasks = [...state.tasks];
 
       const createdTasks = entries.map((entry, index) =>
@@ -634,6 +850,8 @@ export const useAppStore = create<AppStore>((set, get) => {
           order: computeNextOrder(nextTasks, false) + index * 1000,
           category: input.category,
           note: input.note,
+          boardId: activeBoardId,
+          columnId: defaultColumn?.id ?? null,
         }),
       );
 
@@ -665,33 +883,37 @@ export const useAppStore = create<AppStore>((set, get) => {
       const updatedAt = nowIso();
       const category = cleanTaskCategory(input.category);
       const note = cleanTaskNote(input.note);
+
+      const patch: Partial<TodoTask> = {
+        text: trimmed,
+        category,
+        note,
+        updatedAt,
+        syncStatus: shouldSync ? "pending" : "local-only",
+      };
+      if (input.description !== undefined) patch.description = input.description;
+      if (input.priority !== undefined) patch.priority = input.priority;
+      if (input.size !== undefined) patch.size = input.size;
+      if (input.dueDate !== undefined) patch.dueDate = input.dueDate;
+      if (input.startDate !== undefined) patch.startDate = input.startDate;
+      if (input.labelIds !== undefined) patch.labelIds = input.labelIds;
+      if (input.subtasks !== undefined) patch.subtasks = input.subtasks;
+
       const nextTasks = state.tasks.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              text: trimmed,
-              category,
-              note,
-              updatedAt,
-              syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const),
-            }
-          : task,
+        task.id === taskId ? { ...task, ...patch } : task,
       );
 
       set({ tasks: nextTasks });
 
       if (shouldSync) {
+        const { syncStatus, ...mutationUpdates } = patch;
+        void syncStatus;
         await enqueueMutations([
           {
             id: createId("mutation_"),
             type: "update",
             taskId,
-            updates: {
-              text: trimmed,
-              category,
-              note,
-              updatedAt,
-            },
+            updates: mutationUpdates,
             createdAt: updatedAt,
           },
         ]);
@@ -709,13 +931,33 @@ export const useAppStore = create<AppStore>((set, get) => {
       }
 
       const nextCompletedState = !target.completed;
-      const nextOrder = computeNextOrder(state.tasks.filter((task) => task.id !== taskId), nextCompletedState);
+
+      // Move to terminal/non-terminal column when toggling
+      const activeBoardId = target.boardId ?? state.activeBoard ?? state.boards[0]?.id ?? null;
+      const boardColumns = state.columns
+        .filter((c) => c.boardId === activeBoardId && !c.deletedAt)
+        .sort((a, b) => a.order - b.order);
+
+      let targetColumnId = target.columnId;
+      if (nextCompletedState) {
+        const terminalCol = boardColumns.find((c) => c.isTerminal);
+        if (terminalCol) targetColumnId = terminalCol.id;
+      } else {
+        const activeCol = boardColumns.find((c) => !c.isTerminal);
+        if (activeCol) targetColumnId = activeCol.id;
+      }
+
+      const nextOrder = computeNextOrder(
+        state.tasks.filter((task) => task.id !== taskId),
+        nextCompletedState,
+      );
       const nextTasks = resequenceTasks(
         state.tasks.map((task) =>
           task.id === taskId
             ? {
                 ...task,
                 completed: nextCompletedState,
+                columnId: targetColumnId,
                 order: nextOrder,
                 updatedAt,
                 syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const),
@@ -740,6 +982,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             taskId,
             updates: {
               completed: nextCompletedState,
+              columnId: targetColumnId,
               order: nextOrder,
               updatedAt,
             },
@@ -850,8 +1093,89 @@ export const useAppStore = create<AppStore>((set, get) => {
           {
             id: createId("mutation_"),
             type: "reorder",
+            columnId: null,
             orderedTaskIds,
             createdAt: nowIso(),
+          },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async reorderTasksInColumn(columnId, orderedTaskIds) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const idSet = new Set(orderedTaskIds);
+      const otherTasks = state.tasks.filter((t) => !idSet.has(t.id));
+      const colTaskById = new Map(
+        state.tasks.filter((t) => idSet.has(t.id)).map((t) => [t.id, t]),
+      );
+
+      const reordered = orderedTaskIds.map((taskId, index) => {
+        const task = colTaskById.get(taskId);
+        if (!task) return null;
+        return {
+          ...task,
+          order: (index + 1) * 1000,
+          updatedAt: nowIso(),
+          syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const),
+        };
+      }).filter(Boolean) as TodoTask[];
+
+      set({ tasks: [...otherTasks, ...reordered] });
+
+      if (shouldSync) {
+        await enqueueMutations([
+          {
+            id: createId("mutation_"),
+            type: "reorder",
+            columnId,
+            orderedTaskIds,
+            createdAt: nowIso(),
+          },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async moveTaskToColumn(taskId, targetColumnId, targetOrder) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const target = state.tasks.find((t) => t.id === taskId);
+      if (!target) return;
+
+      const targetColumn = state.columns.find((c) => c.id === targetColumnId);
+      const isTerminal = targetColumn?.isTerminal ?? false;
+      const updatedAt = nowIso();
+
+      const nextTasks = state.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              columnId: targetColumnId,
+              completed: isTerminal,
+              order: targetOrder,
+              updatedAt,
+              syncStatus: shouldSync ? ("pending" as const) : ("local-only" as const),
+            }
+          : task,
+      );
+
+      set({ tasks: nextTasks });
+
+      if (shouldSync) {
+        await enqueueMutations([
+          {
+            id: createId("mutation_"),
+            type: "update",
+            taskId,
+            updates: {
+              columnId: targetColumnId,
+              completed: isTerminal,
+              order: targetOrder,
+              updatedAt,
+            },
+            createdAt: updatedAt,
           },
         ]);
       } else {
@@ -929,6 +1253,307 @@ export const useAppStore = create<AppStore>((set, get) => {
         await persistCurrentState();
       }
     },
+    // ---- Board CRUD ----
+    async createBoard(name) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const userId = shouldSync ? state.auth.profile?.id ?? null : null;
+      const now = nowIso();
+
+      const boardId = createId("board_");
+      const board: Board = {
+        id: boardId,
+        userId,
+        name: name.trim().slice(0, 80),
+        description: null,
+        order: (Math.max(0, ...state.boards.map((b) => b.order)) + 1000),
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        syncStatus: shouldSync ? "pending" : "local-only",
+      };
+
+      // Default columns for new board
+      const colTodoId = createId("col_");
+      const colDoneId = createId("col_");
+      const defaultColumns: Column[] = [
+        {
+          id: colTodoId,
+          boardId,
+          userId,
+          name: "To Do",
+          color: "#94a3b8",
+          order: 1000,
+          wipLimit: null,
+          isTerminal: false,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          syncStatus: shouldSync ? "pending" : "local-only",
+        },
+        {
+          id: colDoneId,
+          boardId,
+          userId,
+          name: "Done",
+          color: "#4ade80",
+          order: 2000,
+          wipLimit: null,
+          isTerminal: true,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          syncStatus: shouldSync ? "pending" : "local-only",
+        },
+      ];
+
+      set((s) => ({
+        boards: [...s.boards, board],
+        columns: [...s.columns, ...defaultColumns],
+        activeBoard: boardId,
+      }));
+
+      if (shouldSync) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "upsert-board", board, createdAt: now },
+          ...defaultColumns.map((col) => ({
+            id: createId("mutation_"),
+            type: "upsert-column" as const,
+            column: col,
+            createdAt: now,
+          })),
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async updateBoard(boardId, updates) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const now = nowIso();
+
+      set((s) => ({
+        boards: s.boards.map((b) =>
+          b.id === boardId ? { ...b, ...updates, updatedAt: now } : b,
+        ),
+      }));
+
+      const updated = get().boards.find((b) => b.id === boardId);
+      if (shouldSync && updated) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "upsert-board", board: updated, createdAt: now },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async deleteBoard(boardId) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const deletedAt = nowIso();
+
+      const remainingBoards = state.boards.filter((b) => b.id !== boardId);
+      const nextActiveBoard = remainingBoards[0]?.id ?? null;
+
+      set((s) => ({
+        boards: s.boards.filter((b) => b.id !== boardId),
+        columns: s.columns.filter((c) => c.boardId !== boardId),
+        labels: s.labels.filter((l) => l.boardId !== boardId),
+        tasks: s.tasks.filter((t) => t.boardId !== boardId),
+        activeBoard: nextActiveBoard,
+      }));
+
+      if (shouldSync) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "delete-board", boardId, deletedAt, createdAt: deletedAt },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    // ---- Column CRUD ----
+    async createColumn(boardId, name, options = {}) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const userId = shouldSync ? state.auth.profile?.id ?? null : null;
+      const now = nowIso();
+
+      const boardCols = state.columns.filter((c) => c.boardId === boardId);
+      const maxOrder = boardCols.reduce((max, c) => Math.max(max, c.order), 0);
+
+      const column: Column = {
+        id: createId("col_"),
+        boardId,
+        userId,
+        name: name.trim().slice(0, 60),
+        color: options.color ?? null,
+        order: maxOrder + 1000,
+        wipLimit: options.wipLimit ?? null,
+        isTerminal: false,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        syncStatus: shouldSync ? "pending" : "local-only",
+      };
+
+      set((s) => ({ columns: [...s.columns, column] }));
+
+      if (shouldSync) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "upsert-column", column, createdAt: now },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async updateColumn(columnId, updates) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const now = nowIso();
+
+      set((s) => ({
+        columns: s.columns.map((c) =>
+          c.id === columnId ? { ...c, ...updates, updatedAt: now } : c,
+        ),
+      }));
+
+      const updated = get().columns.find((c) => c.id === columnId);
+      if (shouldSync && updated) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "upsert-column", column: updated, createdAt: now },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async deleteColumn(columnId) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const deletedAt = nowIso();
+
+      // Move tasks in deleted column to first available other column
+      const board = state.columns.find((c) => c.id === columnId);
+      const boardId = board?.boardId;
+      const fallbackCol = state.columns.find(
+        (c) => c.boardId === boardId && c.id !== columnId && !c.deletedAt,
+      );
+
+      set((s) => ({
+        columns: s.columns.filter((c) => c.id !== columnId),
+        tasks: s.tasks.map((t) =>
+          t.columnId === columnId
+            ? { ...t, columnId: fallbackCol?.id ?? null, updatedAt: deletedAt }
+            : t,
+        ),
+      }));
+
+      if (shouldSync) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "delete-column", columnId, deletedAt, createdAt: deletedAt },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async reorderColumns(boardId, orderedColumnIds) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const now = nowIso();
+      const idSet = new Set(orderedColumnIds);
+
+      set((s) => ({
+        columns: s.columns.map((c) => {
+          if (!idSet.has(c.id) || c.boardId !== boardId) return c;
+          const idx = orderedColumnIds.indexOf(c.id);
+          return { ...c, order: (idx + 1) * 1000, updatedAt: now };
+        }),
+      }));
+
+      if (shouldSync) {
+        const updated = get().columns.filter((c) => idSet.has(c.id));
+        await enqueueMutations(
+          updated.map((col) => ({
+            id: createId("mutation_"),
+            type: "upsert-column" as const,
+            column: col,
+            createdAt: now,
+          })),
+        );
+      } else {
+        await persistCurrentState();
+      }
+    },
+    // ---- Label CRUD ----
+    async createLabel(boardId, name, color) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const userId = shouldSync ? state.auth.profile?.id ?? null : null;
+      const now = nowIso();
+
+      const label: Label = {
+        id: createId("label_"),
+        boardId,
+        userId,
+        name: name.trim().slice(0, 48),
+        color,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        syncStatus: shouldSync ? "pending" : "local-only",
+      };
+
+      set((s) => ({ labels: [...s.labels, label] }));
+
+      if (shouldSync) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "upsert-label", label, createdAt: now },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async updateLabel(labelId, updates) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const now = nowIso();
+
+      set((s) => ({
+        labels: s.labels.map((l) =>
+          l.id === labelId ? { ...l, ...updates, updatedAt: now } : l,
+        ),
+      }));
+
+      const updated = get().labels.find((l) => l.id === labelId);
+      if (shouldSync && updated) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "upsert-label", label: updated, createdAt: now },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
+    async deleteLabel(labelId) {
+      const state = get();
+      const shouldSync = state.mode === "cloud" && state.auth.status === "signed-in";
+      const deletedAt = nowIso();
+
+      set((s) => ({
+        labels: s.labels.filter((l) => l.id !== labelId),
+        tasks: s.tasks.map((t) =>
+          t.labelIds.includes(labelId)
+            ? { ...t, labelIds: t.labelIds.filter((id) => id !== labelId), updatedAt: deletedAt }
+            : t,
+        ),
+      }));
+
+      if (shouldSync) {
+        await enqueueMutations([
+          { id: createId("mutation_"), type: "delete-label", labelId, deletedAt, createdAt: deletedAt },
+        ]);
+      } else {
+        await persistCurrentState();
+      }
+    },
     async flushQueue() {
       const state = get();
       if (!isCloudSyncActive(state) || state.isFlushingQueue || state.sync.queue.length === 0) {
@@ -984,17 +1609,18 @@ export const useAppStore = create<AppStore>((set, get) => {
           }
 
           if (mutation.type === "reorder") {
-            const activeTasks = current.tasks
-              .filter((task) => !task.completed)
+            const colId = mutation.columnId;
+            const tasksToSync = current.tasks
+              .filter((task) => !task.completed && (colId == null || task.columnId === colId))
               .map((task) => ({
                 ...task,
                 userId: current.auth.profile?.id ?? task.userId,
               }));
-            await upsertRemoteTasks(activeTasks);
+            await upsertRemoteTasks(tasksToSync);
             set((snapshot) => ({
               tasks: markTaskStatus(
                 snapshot.tasks,
-                activeTasks.map((task) => task.id),
+                tasksToSync.map((task) => task.id),
                 "synced",
               ),
             }));
@@ -1002,6 +1628,30 @@ export const useAppStore = create<AppStore>((set, get) => {
 
           if (mutation.type === "settings") {
             await saveRemoteSettings(mutation.settings);
+          }
+
+          if (mutation.type === "upsert-board") {
+            await upsertRemoteBoard(mutation.board);
+          }
+
+          if (mutation.type === "delete-board") {
+            await softDeleteRemoteBoard(mutation.boardId, mutation.deletedAt);
+          }
+
+          if (mutation.type === "upsert-column") {
+            await upsertRemoteColumn(mutation.column);
+          }
+
+          if (mutation.type === "delete-column") {
+            await softDeleteRemoteColumn(mutation.columnId, mutation.deletedAt);
+          }
+
+          if (mutation.type === "upsert-label") {
+            await upsertRemoteLabel(mutation.label);
+          }
+
+          if (mutation.type === "delete-label") {
+            await softDeleteRemoteLabel(mutation.labelId, mutation.deletedAt);
           }
 
           set((snapshot) => ({
@@ -1062,6 +1712,9 @@ export const useAppStore = create<AppStore>((set, get) => {
 
         set((state) => ({
           settings: nextSettings,
+          boards: remote.boards.length > 0 ? remote.boards : state.boards,
+          columns: remote.columns.length > 0 ? remote.columns : state.columns,
+          labels: remote.labels.length > 0 ? remote.labels : state.labels,
           auth: {
             ...state.auth,
             profile: remote.profile,

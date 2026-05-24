@@ -160,6 +160,8 @@ export function buildTask(
     order?: number;
     category?: string | null;
     note?: string | null;
+    boardId?: string | null;
+    columnId?: string | null;
   } = {},
 ) {
   const timestamp = nowIso();
@@ -170,13 +172,38 @@ export function buildTask(
     text: text.trim(),
     category: cleanTaskCategory(options.category),
     note: cleanTaskNote(options.note),
+    description: cleanTaskNote(options.note),
     completed: options.completed ?? false,
     order: options.order ?? 1000,
+    boardId: options.boardId ?? null,
+    columnId: options.columnId ?? null,
+    priority: null,
+    size: null,
+    labelIds: [],
+    dueDate: null,
+    startDate: null,
+    assigneeId: null,
+    subtasks: [],
     createdAt: timestamp,
     updatedAt: timestamp,
     deletedAt: null,
     syncStatus: options.status ?? "local-only",
   } satisfies TodoTask;
+}
+
+export function groupTasksByColumn(tasks: TodoTask[]): Map<string, TodoTask[]> {
+  const groups = new Map<string, TodoTask[]>();
+  for (const task of tasks) {
+    if (task.deletedAt) continue;
+    const key = task.columnId ?? "__none__";
+    const existing = groups.get(key) ?? [];
+    existing.push(task);
+    groups.set(key, existing);
+  }
+  for (const [key, group] of groups) {
+    groups.set(key, group.sort((a, b) => a.order - b.order));
+  }
+  return groups;
 }
 
 export function sortTasks(tasks: TodoTask[]) {
